@@ -123,8 +123,6 @@ def initialize_model(ckpt_path: str, config: str):
     rank = int(os.getenv("RANK", "0"))
     local_rank = int(os.getenv("LOCAL_RANK", "0"))
     
-    if world_size > 1:
-        dist.init_process_group("nccl")
     
     torch.cuda.set_device(local_rank)
     torch.set_default_dtype(torch.bfloat16)
@@ -290,8 +288,7 @@ def main(
             print0("Completion:", completion)
             print0()
 
-    if world_size > 1:
-        dist.destroy_process_group()
+    # Process group cleanup is now handled in run_main()
 
 
 import torch.multiprocessing
@@ -310,21 +307,7 @@ def my_load_model(
         total += sd[k].view(-1)[0].float().cpu() # force it to actually load
     model.load_state_dict(sd, strict=False, assign=True)
 
-if __name__ == "__main__":
-    """
-    Command-line interface for distributed text generation.
-
-    Arguments:
-        --ckpt-path (str): Path to the model checkpoint directory.
-        --config (str): Path to the model configuration file.
-        --input-file (str, optional): File containing prompts for batch processing.
-        --interactive (bool, optional): Enable interactive mode for generating text.
-        --max-new-tokens (int, optional): Maximum number of new tokens to generate. Defaults to 200.
-        --temperature (float, optional): Temperature for sampling. Defaults to 0.2.
-
-    Raises:
-        AssertionError: If neither input-file nor interactive mode is specified.
-    """
+def run_main():
     parser = ArgumentParser()
     parser.add_argument("--ckpt-path", type=str, required=True)
     parser.add_argument("--config", type=str, required=True)
@@ -335,4 +318,17 @@ if __name__ == "__main__":
     parser.add_argument("--temperature", type=float, default=0.2)
     args = parser.parse_args()
     assert args.input_file or args.interactive or args.api
-    main(args.ckpt_path, args.config, args.input_file, args.interactive, args.max_new_tokens, args.temperature)
+    
+    # Initialize distributed process group if needed
+    world_size = int(os.getenv("WORLD_SIZE", "1"))
+    if world_size > 1:
+        dist.init_process_group("nccl")
+    
+    try:
+        main(args.ckpt_path, args.config, args.input_file, args.interactive, args.max_new_tokens, args.temperature)
+    finally:
+        if world_size > 1:
+            dist.destroy_process_group()
+
+if __name__ == "__main__":
+    run_main()
