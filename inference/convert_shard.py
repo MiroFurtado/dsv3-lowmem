@@ -108,7 +108,6 @@ if __name__ == "__main__":
     parser.add_argument("--which-mp", type=int, required=True, help="Which model parallel shard to generate (0-based index)")
     args = parser.parse_args()
     assert args.n_experts % args.model_parallel == 0
-assert 0 <= args.which_mp < args.model_parallel, f"which-mp must be between 0 and {args.model_parallel-1}"
-
+    assert 0 <= args.which_mp < args.model_parallel, f"which-mp must be between 0 and {args.model_parallel-1}"
     print(f"Generating shard {args.which_mp} of {args.model_parallel}")
     main(args.hf_ckpt_path, args.save_path, args.n_experts, args.model_parallel, [args.which_mps])
